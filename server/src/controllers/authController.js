@@ -4,9 +4,10 @@ import { generateToken } from '../utils/generateToken.js';
 // @desc    Register new user
 // @route   POST /api/auth/register
 // @access  Public
-export const registerUser = async (req, res) => {
+export const registerUser = async (req, res, next) => {
   try {
-    const { name, email, password, targetRole } = req.body;
+    const { name, password, targetRole } = req.body;
+    const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Please fill in all required fields' });
@@ -18,10 +19,10 @@ export const registerUser = async (req, res) => {
     }
 
     const user = await User.create({
-      name,
+      name: name.trim(),
       email,
       password,
-      targetRole: targetRole || 'Software Development Engineer',
+      targetRole: targetRole?.trim() || 'Software Development Engineer',
     });
 
     res.status(201).json({
@@ -32,16 +33,17 @@ export const registerUser = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server error during registration' });
+    next(error);
   }
 };
 
 // @desc    Authenticate user & get token
 // @route   POST /api/auth/login
 // @access  Public
-export const loginUser = async (req, res) => {
+export const loginUser = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = req.body.email ? req.body.email.trim().toLowerCase() : null;
 
     if (!email || !password) {
       return res.status(400).json({ message: 'Please provide both email and password' });
@@ -60,7 +62,7 @@ export const loginUser = async (req, res) => {
       token: generateToken(user._id),
     });
   } catch (error) {
-    res.status(500).json({ message: error.message || 'Server error during login' });
+    next(error);
   }
 };
 
