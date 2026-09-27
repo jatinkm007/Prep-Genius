@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-// ... other imports
+import authRoutes from './routes/authRoutes.js';
+import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 const app = express();
 
@@ -36,4 +37,20 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ... rest of your middleware (express.json, routes, errorHandler)
+// Body parser
+app.use(express.json());
+
+// Base health check
+app.get('/', (req, res) => {
+  res.json({ status: 'active', message: 'Prep Genius API is running' });
+});
+
+// Routes
+app.use('/api/auth', authRoutes);
+
+// Error Handling Middleware
+app.use(notFound);
+app.use(errorHandler);
+
+// CRUCIAL: Export the app instance as default
+export default app;
