@@ -32,6 +32,11 @@ Prep Genius is a modern, modular web platform designed with a **$0-cost architec
 
 ---
 
+## Authors
+
+Jatin Kumar Mishra & Anushka Parashar
+
+
 ## 📐 Project Structure
 
 ```text
@@ -58,7 +63,3 @@ prep-genius/
 │   └── package.json
 └── README.md
 
-
-## Authors
-
-Jatin Kumar Mishra & Anushka Parashar
