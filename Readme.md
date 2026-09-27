@@ -57,3 +57,8 @@ prep-genius/
 │   │   └── server.js           # Server bootstrap
 │   └── package.json
 └── README.md
+
+
+## Authors
+
+Jatin Kumar Mishra & Anushka Parashar
