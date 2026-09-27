@@ -1,5 +1,5 @@
 import { useAuth } from '../context/AuthContext';
-import { Logo } from '../components/common/Logo';
+import { Logo } from '../../components/common/Logo';
 import { 
   LogOut, 
   Sparkles, 
