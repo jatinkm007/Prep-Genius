@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
+import problemRoutes from './routes/problemRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 const app = express();
@@ -22,7 +23,7 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow non-browser requests (Postman, curl, server-to-server)
+    // Allow tools like Postman or mobile requests without origin header
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
@@ -36,22 +37,22 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
-// Apply CORS and explicitly handle OPTIONS preflight across all routes
+// 1. CORS middleware (this handles all routes and options automatically)
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
-// Body parser
+// 2. Read incoming JSON body
 app.use(express.json());
 
-// Base health check
+// 3. Health check route
 app.get('/', (req, res) => {
   res.json({ status: 'active', message: 'Prep Genius API is running' });
 });
 
-// Routes
+// 4. API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/problems', problemRoutes);
 
-// Error Handling Middleware
+// 5. Error handling middleware
 app.use(notFound);
 app.use(errorHandler);
 

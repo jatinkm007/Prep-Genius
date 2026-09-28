@@ -1,19 +1,23 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import React from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
 
-const ProtectedRoute = () => {
-  const { user, loading } = useAuth();
+export default function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth() || {};
 
-  // Prevent redirect while verifying existing session token
+  // Show a clean loading state while checking login status
   if (loading) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-900 text-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent"></div>
+      <div className="h-screen w-full bg-zinc-950 flex items-center justify-center text-zinc-400 text-sm font-sans">
+        Checking session...
       </div>
     );
   }
 
-  return user ? <Outlet /> : <Navigate to="/login" replace />;
-};
+  // If not logged in, redirect to login page
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-export default ProtectedRoute;
+  return children;
+}
