@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { 
   Code2, 
@@ -11,7 +11,6 @@ import {
   LogOut, 
   Terminal, 
   Sparkles,
-  ArrowRight,
   Lock
 } from 'lucide-react';
 
@@ -75,7 +74,6 @@ export default function Dashboard() {
               Step into deliberate practice. Benchmark your code, sharpen behavioral clarity, and optimize your resume for eager tech recruiters.
             </p>
 
-            {/* Responsive Stats: Stacks on small phones, 3 cols on tablet/desktop */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-6 sm:mt-8 pt-6 border-t border-zinc-800/80">
               <div className="flex items-center gap-3 bg-zinc-900/40 sm:bg-transparent p-2.5 sm:p-0 rounded-lg border border-zinc-800/40 sm:border-0">
                 <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
@@ -123,16 +121,13 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-            {/* Module 1: Live Coding IDE (Active) */}
-            <Link
-              to="/problems/two-sum"
-              className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#0E131F] border border-zinc-800 hover:border-purple-500/60 rounded-xl transition-all duration-200 hover:-translate-y-1 shadow-lg hover:shadow-purple-950/20"
-            >
+            {/* Module 1: Live Coding IDE (Reset to Locked/Upcoming) */}
+            <div className="relative flex flex-col justify-between p-5 sm:p-6 bg-[#0E131F]/60 border border-zinc-800/60 rounded-xl opacity-75">
               <div>
-                <div className="w-10 h-10 rounded-lg bg-purple-600/10 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 transition-transform">
+                <div className="w-10 h-10 rounded-lg bg-zinc-800/50 border border-zinc-700/40 flex items-center justify-center text-zinc-400 mb-4">
                   <Code2 className="w-5 h-5" />
                 </div>
-                <h3 className="text-sm font-bold text-zinc-100 group-hover:text-purple-300 transition-colors">
+                <h3 className="text-sm font-bold text-zinc-200">
                   Live Coding IDE
                 </h3>
                 <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
@@ -140,15 +135,15 @@ export default function Dashboard() {
                 </p>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-zinc-800/80 flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-purple-400 font-mono">
-                  Phase 2 (Live)
+              <div className="mt-6 pt-4 border-t border-zinc-800/60 flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-zinc-500 font-mono">
+                  Phase 2
                 </span>
-                <span className="flex items-center gap-1 text-xs text-zinc-400 group-hover:text-zinc-100 transition-colors font-medium">
-                  Enter IDE <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                <span className="flex items-center gap-1 text-xs text-zinc-500">
+                  <Lock className="w-3.5 h-3.5" /> Upcoming
                 </span>
               </div>
-            </Link>
+            </div>
 
             {/* Module 2: ATS Resume Audit */}
             <div className="relative flex flex-col justify-between p-5 sm:p-6 bg-[#0E131F]/60 border border-zinc-800/60 rounded-xl opacity-75">

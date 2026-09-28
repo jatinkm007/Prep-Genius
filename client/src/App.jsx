@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-// 1. Auth context provider (this gives login info to the whole app)
+// 1. Auth context provider
 import { AuthProvider } from './context/AuthContext.jsx';
 
 // 2. Auth pages & components
@@ -9,9 +9,6 @@ import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
 import Dashboard from './pages/dashboard/Dashboard.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
-
-// 3. Coding Workspace
-import Workspace from './components/Workspace.jsx';
 
 export default function App() {
   return (
@@ -28,16 +25,6 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Protected Workspace Route */}
-          <Route
-            path="/problems/:slug"
-            element={
-              <ProtectedRoute>
-                <Workspace />
               </ProtectedRoute>
             }
           />
