@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // 1. Auth context provider
 import { AuthProvider } from './context/AuthContext.jsx';
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
         <Analytics />
+        <SpeedInsights />
       </AuthProvider>
     </BrowserRouter>
   );
