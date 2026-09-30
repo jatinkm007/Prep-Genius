@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
+import tutorRoutes from './routes/tutorRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 const app = express();
@@ -41,11 +42,12 @@ app.use(express.json());
 
 // Health check route
 app.get('/', (req, res) => {
-  res.json({ status: 'active', message: 'Prep Genius API is running (Auth Stage)' });
+  res.json({ status: 'active', message: 'Prep Genius API is running' });
 });
 
-// Phase 1 Routes
+// Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/tutor', tutorRoutes);
 
 // Error handling middleware
 app.use(notFound);
