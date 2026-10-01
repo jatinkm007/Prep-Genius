@@ -1,10 +1,18 @@
 import api from './axios';
 
-export const sendTutorMessage = async (message, sessionId = null, topic = 'General Technical') => {
+export const sendTutorMessage = async (
+  message,
+  sessionId = null,
+  topic = 'General Technical',
+  code = '',
+  language = ''
+) => {
   const response = await api.post('/tutor/chat', {
     message,
     sessionId,
     topic,
+    code,
+    language,
   });
   return response.data;
 };

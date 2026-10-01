@@ -8,7 +8,7 @@ import { generateSocraticResponse } from '../services/aiService.js';
  */
 export const sendMessage = async (req, res, next) => {
   try {
-    const { sessionId, message, topic } = req.body;
+    const { sessionId, message, topic, code, language } = req.body;
     const userId = req.user._id;
 
     if (!message || message.trim() === '') {
@@ -35,11 +35,15 @@ export const sendMessage = async (req, res, next) => {
     // Append user message
     session.messages.push({
       role: 'user',
-      content: message,
+      content: message.trim(),
     });
 
-    // Call Socratic AI service
-    const aiReply = await generateSocraticResponse(session.messages);
+    // Call Socratic AI service with conversational history and current code buffer
+    const aiReply = await generateSocraticResponse(
+      session.messages,
+      code || '',
+      language || ''
+    );
 
     // Append assistant response
     session.messages.push({

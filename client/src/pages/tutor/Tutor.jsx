@@ -6,9 +6,11 @@ import {
   fetchSessionById, 
   deleteUserSession 
 } from '../../api/tutorApi';
+import { fetchAllProblems, fetchProblemBySlug } from '../../api/problems';
 import MarkdownRenderer from '../../components/common/MarkdownRenderer';
-import CodeEditor from '../../pages/tutor/CodeEditor';
-import TutorActions from '../../pages/tutor/TutorActions';
+import CodeEditor from './CodeEditor';
+import TutorActions from './TutorActions';
+import ProblemDescription from './ProblemDescription';
 import { 
   Terminal, 
   ArrowLeft, 
@@ -19,22 +21,15 @@ import {
   PanelLeftClose, 
   PanelLeft,
   Code,
+  BookOpen,
   MessageSquare,
   X
 } from 'lucide-react';
 
-const INITIAL_CPP = `#include <iostream>
-#include <vector>
-using namespace std;
-
-// Implement your solution below
-int main() {
-    cout << "Ready for deliberate practice!" << endl;
-    return 0;
-}`;
-
 export default function Tutor() {
   const navigate = useNavigate();
+
+  // Sessions and Chat State
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -42,12 +37,20 @@ export default function Tutor() {
   const [loading, setLoading] = useState(false);
   const [fetchingHistory, setFetchingHistory] = useState(false);
 
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
-  const [showEditorDesktop, setShowEditorDesktop] = useState(true);
-  const [mobileActiveTab, setMobileActiveTab] = useState('chat');
+  // Problem State
+  const [problems, setProblems] = useState([]);
+  const [currentProblem, setCurrentProblem] = useState(null);
+  const [loadingProblem, setLoadingProblem] = useState(false);
 
+  // Layout and Viewport State
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
+  const [showProblemDesktop, setShowProblemDesktop] = useState(true);
+  const [showEditorDesktop, setShowEditorDesktop] = useState(true);
+  const [mobileActiveTab, setMobileActiveTab] = useState('problem'); // 'problem' | 'code' | 'chat'
+
+  // Code State
   const [language, setLanguage] = useState('cpp');
-  const [code, setCode] = useState(INITIAL_CPP);
+  const [code, setCode] = useState('');
 
   const messagesEndRef = useRef(null);
 
@@ -57,6 +60,7 @@ export default function Tutor() {
 
   useEffect(() => {
     loadSessions();
+    loadProblems();
   }, []);
 
   useEffect(() => {
@@ -71,6 +75,44 @@ export default function Tutor() {
       setSessions(data);
     } catch (err) {
       console.error('Failed to load sessions:', err);
+    }
+  };
+
+  const loadProblems = async () => {
+    setLoadingProblem(true);
+    try {
+      const problemList = await fetchAllProblems();
+      setProblems(problemList);
+      if (problemList.length > 0) {
+        await handleSelectProblem(problemList[0].slug);
+      }
+    } catch (err) {
+      console.error('Failed to load problem listing:', err);
+    } finally {
+      setLoadingProblem(false);
+    }
+  };
+
+  const handleSelectProblem = async (slug) => {
+    setLoadingProblem(true);
+    try {
+      const problemData = await fetchProblemBySlug(slug);
+      setCurrentProblem(problemData);
+      
+      // Auto-load starter code for selected language
+      const starter = problemData?.starterCode?.[language] || '';
+      setCode(starter);
+    } catch (err) {
+      console.error('Failed to retrieve problem details:', err);
+    } finally {
+      setLoadingProblem(false);
+    }
+  };
+
+  const handleLanguageChangeWithProblem = (newLang) => {
+    setLanguage(newLang);
+    if (currentProblem?.starterCode?.[newLang]) {
+      setCode(currentProblem.starterCode[newLang]);
     }
   };
 
@@ -113,15 +155,26 @@ export default function Tutor() {
     }
   };
 
-  const executeSend = async (userText) => {
+  const executeSend = async (userText, includeCodeContext = false) => {
     if (!userText.trim() || loading) return;
 
-    const updatedMessages = [...messages, { role: 'user', content: userText }];
+    const updatedMessages = [...messages, { role: 'user', content: userText.trim() }];
     setMessages(updatedMessages);
     setLoading(true);
 
     try {
-      const res = await sendTutorMessage(userText, currentSessionId);
+      // Build problem context prefix for the Socratic prompt
+      const problemTopic = currentProblem 
+        ? `Problem: ${currentProblem.title} (${currentProblem.category})` 
+        : 'General Technical';
+
+      const res = await sendTutorMessage(
+        userText.trim(),
+        currentSessionId,
+        problemTopic,
+        includeCodeContext ? code : '',
+        includeCodeContext ? language : ''
+      );
       
       if (!currentSessionId && res.sessionId) {
         setCurrentSessionId(res.sessionId);
@@ -148,15 +201,22 @@ export default function Tutor() {
     if (!inputMessage.trim()) return;
     const text = inputMessage.trim();
     setInputMessage('');
-    executeSend(text);
+    executeSend(text, Boolean(code && code.trim()));
   };
 
   const handleAnalyzeCode = () => {
-    const prompt = `Here is my current ${language.toUpperCase()} implementation:\n\`\`\`${language}\n${code}\n\`\`\`\nPlease review my logic, point out potential edge-case issues or complexity bottlenecks, and give me a progressive Socratic hint without giving away the full answer.`;
     if (window.innerWidth < 768) {
       setMobileActiveTab('chat');
     }
-    executeSend(prompt);
+    const prompt = currentProblem
+      ? `I am working on "${currentProblem.title}". Review my approach against the constraints and test cases, and guide me on edge cases or potential bottlenecks.`
+      : 'Please analyze my current code implementation using Socratic guidance.';
+    
+    executeSend(prompt, true);
+  };
+
+  const handleTriggerAction = (promptText) => {
+    executeSend(promptText, Boolean(code && code.trim()));
   };
 
   return (
@@ -188,14 +248,14 @@ export default function Tutor() {
           <div className="flex items-center gap-1.5">
             <button
               onClick={handleNewChat}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors shadow-sm"
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New</span>
             </button>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="p-1 text-zinc-400 hover:text-zinc-200 md:hidden"
+              className="p-1 text-zinc-400 hover:text-zinc-200 md:hidden cursor-pointer"
               title="Close Drawer"
             >
               <X className="w-4 h-4" />
@@ -220,7 +280,7 @@ export default function Tutor() {
                 <span className="truncate pr-2">{session.title || 'Untitled Session'}</span>
                 <button
                   onClick={(e) => handleDeleteSession(e, session._id)}
-                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 p-1 rounded transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-rose-400 p-1 rounded transition-opacity cursor-pointer"
                   title="Delete Session"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -238,14 +298,14 @@ export default function Tutor() {
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               onClick={() => navigate('/dashboard')}
-              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0"
+              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0 cursor-pointer"
               title="Back to Dashboard"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0"
+              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0 cursor-pointer"
               title={sidebarOpen ? 'Hide History' : 'Show History'}
             >
               {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
@@ -253,7 +313,7 @@ export default function Tutor() {
             
             <div className="flex items-center gap-2 min-w-0">
               <h1 className="text-xs sm:text-sm font-bold text-zinc-100 truncate">
-                Socratic AI Tutor
+                {currentProblem ? currentProblem.title : 'Socratic Workspace'}
               </h1>
               <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-600/10 border border-purple-500/20 text-[10px] font-mono text-purple-400 shrink-0">
                 <Sparkles className="w-3 h-3" /> Socratic Guided
@@ -262,24 +322,60 @@ export default function Tutor() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Desktop Code Editor Toggle */}
-            <button
-              onClick={() => setShowEditorDesktop(!showEditorDesktop)}
-              className={`hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                showEditorDesktop 
-                  ? 'bg-purple-600/15 border-purple-500/30 text-purple-300' 
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              <Code className="w-3.5 h-3.5" />
-              <span>{showEditorDesktop ? 'Hide Editor' : 'Show Editor'}</span>
-            </button>
+            {/* Desktop Toggles */}
+            <div className="hidden md:flex items-center gap-1.5">
+              <button
+                onClick={() => setShowProblemDesktop(!showProblemDesktop)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                  showProblemDesktop 
+                    ? 'bg-purple-600/15 border-purple-500/30 text-purple-300' 
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Problem</span>
+              </button>
+
+              <button
+                onClick={() => setShowEditorDesktop(!showEditorDesktop)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                  showEditorDesktop 
+                    ? 'bg-purple-600/15 border-purple-500/30 text-purple-300' 
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Code className="w-3.5 h-3.5" />
+                <span>Editor</span>
+              </button>
+            </div>
 
             {/* Mobile Tab Switcher */}
             <div className="flex md:hidden items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
               <button
+                onClick={() => setMobileActiveTab('problem')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
+                  mobileActiveTab === 'problem'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <BookOpen className="w-3 h-3" />
+                <span>Problem</span>
+              </button>
+              <button
+                onClick={() => setMobileActiveTab('code')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
+                  mobileActiveTab === 'code'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Code className="w-3 h-3" />
+                <span>Code</span>
+              </button>
+              <button
                 onClick={() => setMobileActiveTab('chat')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
                   mobileActiveTab === 'chat'
                     ? 'bg-purple-600 text-white shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
@@ -288,37 +384,45 @@ export default function Tutor() {
                 <MessageSquare className="w-3 h-3" />
                 <span>Chat</span>
               </button>
-              <button
-                onClick={() => setMobileActiveTab('code')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                  mobileActiveTab === 'code'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <Code className="w-3.5 h-3.5" />
-                <span>Code</span>
-              </button>
             </div>
           </div>
         </header>
 
         {/* Content Body */}
         <div className="flex-1 flex overflow-hidden min-h-0 relative">
+          {/* Problem Statement Pane */}
+          <div
+            className={`h-full transition-all overflow-hidden ${
+              showProblemDesktop ? 'md:w-1/3 md:block' : 'md:hidden'
+            } ${
+              mobileActiveTab === 'problem' ? 'w-full block z-20 absolute inset-0 md:relative' : 'hidden'
+            }`}
+          >
+            <ProblemDescription
+              problems={problems}
+              currentProblem={currentProblem}
+              onSelectProblem={handleSelectProblem}
+              loading={loadingProblem}
+            />
+          </div>
+
           {/* Code Editor Pane */}
           <div
-            className={`h-full border-r border-zinc-800/80 transition-all overflow-hidden ${
-              showEditorDesktop ? 'md:w-1/2 md:block' : 'md:hidden'
+            className={`h-full transition-all overflow-hidden ${
+              showEditorDesktop 
+                ? showProblemDesktop ? 'md:w-1/3 md:block' : 'md:w-1/2 md:block' 
+                : 'md:hidden'
             } ${
               mobileActiveTab === 'code' ? 'w-full block z-20 absolute inset-0 md:relative' : 'hidden'
             }`}
           >
             <CodeEditor
               language={language}
-              setLanguage={setLanguage}
+              setLanguage={handleLanguageChangeWithProblem}
               code={code}
               setCode={setCode}
               onAskAboutCode={handleAnalyzeCode}
+              isLoading={loading}
             />
           </div>
 
@@ -340,10 +444,10 @@ export default function Tutor() {
                     <Terminal className="w-5 h-5 sm:w-6 sm:h-6" />
                   </div>
                   <h3 className="text-xs sm:text-sm font-bold text-zinc-200 mb-1">
-                    What algorithm are you tackling?
+                    {currentProblem ? `Ready for ${currentProblem.title}?` : 'Deliberate Practice Mode'}
                   </h3>
                   <p className="text-[11px] sm:text-xs text-zinc-500 leading-relaxed">
-                    Write code in the editor, click <span className="text-purple-400 font-semibold">Analyze Logic</span>, or use the guided action modes below.
+                    Check the problem description, write your approach in the editor, and click <span className="text-purple-400 font-semibold">Analyze Logic</span> or use the hints below.
                   </p>
                 </div>
               ) : (
@@ -383,7 +487,7 @@ export default function Tutor() {
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse delay-75"></span>
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse delay-150"></span>
-                    <span className="text-xs ml-2 text-zinc-400">Reviewing code & formulating hint...</span>
+                    <span className="text-xs ml-2 text-zinc-400">Formulating Socratic guidance...</span>
                   </div>
                 </div>
               )}
@@ -394,7 +498,7 @@ export default function Tutor() {
             <div className="p-3 sm:p-4 border-t border-zinc-800/80 bg-[#080B11]/90 backdrop-blur-md shrink-0 space-y-2.5">
               <div className="max-w-4xl mx-auto">
                 <TutorActions 
-                  onTriggerAction={executeSend} 
+                  onTriggerAction={handleTriggerAction} 
                   disabled={loading} 
                 />
               </div>
@@ -411,7 +515,7 @@ export default function Tutor() {
                 <button
                   type="submit"
                   disabled={loading || !inputMessage.trim()}
-                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs sm:text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-md shadow-purple-600/20 shrink-0"
+                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs sm:text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-md shadow-purple-600/20 shrink-0 cursor-pointer"
                 >
                   <span className="hidden sm:inline">Send</span>
                   <Send className="w-3.5 h-3.5" />

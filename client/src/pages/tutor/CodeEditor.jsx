@@ -1,8 +1,8 @@
 import React from 'react';
 import Editor from '@monaco-editor/react';
-import { Play, RotateCcw } from 'lucide-react';
+import { Play, RotateCcw, Loader2 } from 'lucide-react';
 
-const BOILERPLATES = {
+export const BOILERPLATES = {
   cpp: `#include <iostream>
 #include <vector>
 using namespace std;
@@ -26,17 +26,26 @@ function solve() {
 solve();`
 };
 
-export default function CodeEditor({ 
-  language, 
-  setLanguage, 
-  code, 
-  setCode, 
-  onAskAboutCode 
+export default function CodeEditor({
+  language,
+  setLanguage,
+  code,
+  setCode,
+  onAskAboutCode,
+  isLoading = false,
 }) {
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setLanguage(newLang);
-    setCode(BOILERPLATES[newLang] || '');
+
+    // If current code is empty or matches an existing boilerplate, switch to new boilerplate
+    const isDefaultCode = Object.values(BOILERPLATES).some(
+      (b) => b.trim() === (code || '').trim()
+    );
+
+    if (!code || isDefaultCode) {
+      setCode(BOILERPLATES[newLang] || '');
+    }
   };
 
   const handleReset = () => {
@@ -52,7 +61,8 @@ export default function CodeEditor({
           <select
             value={language}
             onChange={handleLanguageChange}
-            className="bg-zinc-900 border border-zinc-700/60 text-zinc-200 text-xs rounded-md px-2.5 py-1 focus:outline-none focus:border-purple-500"
+            disabled={isLoading}
+            className="bg-zinc-900 border border-zinc-700/60 text-zinc-200 text-xs rounded-md px-2.5 py-1 focus:outline-none focus:border-purple-500 disabled:opacity-50"
           >
             <option value="cpp">C++</option>
             <option value="python">Python</option>
@@ -63,19 +73,30 @@ export default function CodeEditor({
         <div className="flex items-center gap-2">
           <button
             onClick={handleReset}
+            disabled={isLoading}
             title="Reset to boilerplate"
-            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors text-xs flex items-center gap-1"
+            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Reset</span>
           </button>
-          
+
           <button
             onClick={onAskAboutCode}
-            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            disabled={isLoading}
+            className="px-3 py-1 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800/50 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer disabled:cursor-not-allowed"
           >
-            <Play className="w-3 h-3 fill-current" />
-            <span>Analyze Logic</span>
+            {isLoading ? (
+              <>
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Thinking...</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-3 h-3 fill-current" />
+                <span>Analyze Logic</span>
+              </>
+            )}
           </button>
         </div>
       </div>

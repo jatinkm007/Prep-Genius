@@ -14,26 +14,50 @@ Guiding Principles:
 5. Keep your tone encouraging, concise, and professional.
 `;
 
-// Direct matches from your verified model availability list
 const VERIFIED_MODELS = [
   'gemini-flash-latest',
   'gemini-3.5-flash',
   'gemini-2.5-flash-lite',
 ];
 
-export const generateSocraticResponse = async (history) => {
+export const generateSocraticResponse = async (history = [], currentCode = '', language = '') => {
   const apiKey = (process.env.GEMINI_API_KEY || '').trim();
 
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY is missing in server/.env');
   }
 
+  if (!Array.isArray(history) || history.length === 0) {
+    throw new Error('Chat history is required to generate a response.');
+  }
+
   const ai = new GoogleGenAI({ apiKey });
 
-  const formattedContents = history.map((msg) => ({
-    role: msg.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: msg.content }],
-  }));
+  // Map messages and filter out invalid/empty turns
+  const formattedContents = history
+    .filter((msg) => msg && typeof msg.content === 'string' && msg.content.trim().length > 0)
+    .map((msg) => ({
+      role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
+      parts: [{ text: msg.content.trim() }],
+    }));
+
+  // Ensure the history starts with a 'user' turn for the Gemini API
+  while (formattedContents.length > 0 && formattedContents[0].role === 'model') {
+    formattedContents.shift();
+  }
+
+  if (formattedContents.length === 0) {
+    throw new Error('No valid user messages found in chat history.');
+  }
+
+  // If code is provided, inject it cleanly into the latest user prompt
+  if (currentCode && currentCode.trim().length > 0) {
+    const lastIndex = formattedContents.length - 1;
+    if (formattedContents[lastIndex].role === 'user') {
+      const codeSnippet = `\n\n[User's Current Code (${language || 'plaintext'})]:\n\`\`\`${language || ''}\n${currentCode.trim()}\n\`\`\``;
+      formattedContents[lastIndex].parts[0].text += codeSnippet;
+    }
+  }
 
   let lastError = null;
 
