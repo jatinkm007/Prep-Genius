@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   sendTutorMessage, 
@@ -7,6 +7,7 @@ import {
   deleteUserSession 
 } from '../../api/tutorApi';
 import { fetchAllProblems, fetchProblemBySlug } from '../../api/problems';
+import { runCodeSnippet, submitCodeSolution } from '../../api/code';
 import MarkdownRenderer from '../../components/common/MarkdownRenderer';
 import CodeEditor from './CodeEditor';
 import TutorActions from './TutorActions';
@@ -23,7 +24,8 @@ import {
   Code,
   BookOpen,
   MessageSquare,
-  X
+  X,
+  GripVertical
 } from 'lucide-react';
 
 export default function Tutor() {
@@ -42,15 +44,25 @@ export default function Tutor() {
   const [currentProblem, setCurrentProblem] = useState(null);
   const [loadingProblem, setLoadingProblem] = useState(false);
 
-  // Layout and Viewport State
+  // Layout & Resizable Panes State
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
   const [showProblemDesktop, setShowProblemDesktop] = useState(true);
   const [showEditorDesktop, setShowEditorDesktop] = useState(true);
   const [mobileActiveTab, setMobileActiveTab] = useState('problem'); // 'problem' | 'code' | 'chat'
 
-  // Code State
+  // Dynamic pane widths in percentages
+  const [problemWidth, setProblemWidth] = useState(28); // 28%
+  const [editorWidth, setEditorWidth] = useState(38);   // 38% (Chat gets 100 - 28 - 38 = 34%)
+  const isDraggingRef = useRef(null); // 'divider1' | 'divider2' | null
+  const workspaceContainerRef = useRef(null);
+
+  // Code & Sandbox Execution State
   const [language, setLanguage] = useState('cpp');
   const [code, setCode] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [executionResult, setExecutionResult] = useState(null);
+  const [submissionResult, setSubmissionResult] = useState(null);
 
   const messagesEndRef = useRef(null);
 
@@ -68,6 +80,50 @@ export default function Tutor() {
       scrollToBottom();
     }
   }, [messages, loading, mobileActiveTab]);
+
+  // Resizable Panes Drag Handlers
+  const handleMouseDown = (dividerId) => (e) => {
+    e.preventDefault();
+    isDraggingRef.current = dividerId;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDraggingRef.current || !workspaceContainerRef.current) return;
+
+    const rect = workspaceContainerRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const totalWidth = rect.width;
+    const mousePercent = (mouseX / totalWidth) * 100;
+
+    if (isDraggingRef.current === 'divider1') {
+      // Clamped between 18% and 45%
+      const newProblemWidth = Math.min(Math.max(mousePercent, 18), 45);
+      setProblemWidth(newProblemWidth);
+    } else if (isDraggingRef.current === 'divider2') {
+      // Clamped so editor + problem doesn't exceed 82% (leaving 18% min for chat)
+      const baseProblem = showProblemDesktop ? problemWidth : 0;
+      const calculatedEditor = mousePercent - baseProblem;
+      const newEditorWidth = Math.min(Math.max(calculatedEditor, 25), 82 - baseProblem);
+      setEditorWidth(newEditorWidth);
+    }
+  }, [problemWidth, showProblemDesktop]);
+
+  const handleMouseUp = useCallback(() => {
+    isDraggingRef.current = null;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
 
   const loadSessions = async () => {
     try {
@@ -99,9 +155,10 @@ export default function Tutor() {
       const problemData = await fetchProblemBySlug(slug);
       setCurrentProblem(problemData);
       
-      // Auto-load starter code for selected language
       const starter = problemData?.starterCode?.[language] || '';
       setCode(starter);
+      setExecutionResult(null);
+      setSubmissionResult(null);
     } catch (err) {
       console.error('Failed to retrieve problem details:', err);
     } finally {
@@ -155,6 +212,54 @@ export default function Tutor() {
     }
   };
 
+  const handleRunCode = async () => {
+    if (!code.trim() || isExecuting || isSubmitting) return;
+
+    setIsExecuting(true);
+    try {
+      const res = await runCodeSnippet(language, code);
+      setExecutionResult(res);
+    } catch (err) {
+      console.error('Code execution failed:', err);
+      setExecutionResult({
+        success: false,
+        exitCode: 1,
+        stdout: '',
+        stderr: err.response?.data?.message || err.message || 'Execution error encountered.',
+        isCompileError: false,
+      });
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleSubmitCode = async () => {
+    if (!code.trim() || !currentProblem || isExecuting || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const res = await submitCodeSolution({
+        problemId: currentProblem._id,
+        slug: currentProblem.slug,
+        language,
+        code,
+      });
+      setSubmissionResult(res);
+    } catch (err) {
+      console.error('Submission failed:', err);
+      setSubmissionResult({
+        verdict: 'Submission Failed',
+        passed: false,
+        totalTestCases: 0,
+        passedTestCases: 0,
+        compileError: err.response?.data?.message || err.message || 'Failed to submit code.',
+        results: [],
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const executeSend = async (userText, includeCodeContext = false) => {
     if (!userText.trim() || loading) return;
 
@@ -163,7 +268,6 @@ export default function Tutor() {
     setLoading(true);
 
     try {
-      // Build problem context prefix for the Socratic prompt
       const problemTopic = currentProblem 
         ? `Problem: ${currentProblem.title} (${currentProblem.category})` 
         : 'General Technical';
@@ -217,6 +321,11 @@ export default function Tutor() {
 
   const handleTriggerAction = (promptText) => {
     executeSend(promptText, Boolean(code && code.trim()));
+  };
+
+  const handleClearConsole = () => {
+    setExecutionResult(null);
+    setSubmissionResult(null);
   };
 
   return (
@@ -359,7 +468,7 @@ export default function Tutor() {
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <BookOpen className="w-3 h-3" />
+                <BookOpen className="w-3.5 h-3.5" />
                 <span>Problem</span>
               </button>
               <button
@@ -370,7 +479,7 @@ export default function Tutor() {
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <Code className="w-3 h-3" />
+                <Code className="w-3.5 h-3.5" />
                 <span>Code</span>
               </button>
               <button
@@ -381,52 +490,118 @@ export default function Tutor() {
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <MessageSquare className="w-3 h-3" />
+                <MessageSquare className="w-3.5 h-3.5" />
                 <span>Chat</span>
               </button>
             </div>
           </div>
         </header>
 
-        {/* Content Body */}
-        <div className="flex-1 flex overflow-hidden min-h-0 relative">
+        {/* Content Body: Resizable 3-Column Workspace */}
+        <div 
+          ref={workspaceContainerRef} 
+          className="flex-1 flex overflow-hidden min-h-0 relative select-text"
+        >
           {/* Problem Statement Pane */}
-          <div
-            className={`h-full transition-all overflow-hidden ${
-              showProblemDesktop ? 'md:w-1/3 md:block' : 'md:hidden'
-            } ${
-              mobileActiveTab === 'problem' ? 'w-full block z-20 absolute inset-0 md:relative' : 'hidden'
-            }`}
-          >
-            <ProblemDescription
-              problems={problems}
-              currentProblem={currentProblem}
-              onSelectProblem={handleSelectProblem}
-              loading={loadingProblem}
-            />
-          </div>
+          {showProblemDesktop && (
+            <div
+              style={{ width: `${problemWidth}%` }}
+              className={`h-full transition-none overflow-hidden shrink-0 hidden md:block ${
+                mobileActiveTab === 'problem' ? '!w-full !block z-20 absolute inset-0 md:relative' : ''
+              }`}
+            >
+              <ProblemDescription
+                problems={problems}
+                currentProblem={currentProblem}
+                onSelectProblem={handleSelectProblem}
+                loading={loadingProblem}
+              />
+            </div>
+          )}
+
+          {/* Divider 1: Between Problem and Code */}
+          {showProblemDesktop && showEditorDesktop && (
+            <div
+              onMouseDown={handleMouseDown('divider1')}
+              className="hidden md:flex w-1 hover:w-1.5 bg-zinc-800/80 hover:bg-purple-500/80 transition-all cursor-col-resize items-center justify-center group z-30 shrink-0"
+              title="Drag to resize Problem panel"
+            >
+              <div className="w-0.5 h-6 bg-zinc-600 group-hover:bg-white rounded-full"></div>
+            </div>
+          )}
 
           {/* Code Editor Pane */}
-          <div
-            className={`h-full transition-all overflow-hidden ${
-              showEditorDesktop 
-                ? showProblemDesktop ? 'md:w-1/3 md:block' : 'md:w-1/2 md:block' 
-                : 'md:hidden'
-            } ${
-              mobileActiveTab === 'code' ? 'w-full block z-20 absolute inset-0 md:relative' : 'hidden'
-            }`}
-          >
-            <CodeEditor
-              language={language}
-              setLanguage={handleLanguageChangeWithProblem}
-              code={code}
-              setCode={setCode}
-              onAskAboutCode={handleAnalyzeCode}
-              isLoading={loading}
-            />
-          </div>
+          {showEditorDesktop && (
+            <div
+              style={{
+                width: showProblemDesktop ? `${editorWidth}%` : `${editorWidth + problemWidth * 0.5}%`
+              }}
+              className={`h-full transition-none overflow-hidden shrink-0 hidden md:block ${
+                mobileActiveTab === 'code' ? '!w-full !block z-20 absolute inset-0 md:relative' : ''
+              }`}
+            >
+              <CodeEditor
+                language={language}
+                setLanguage={handleLanguageChangeWithProblem}
+                code={code}
+                setCode={setCode}
+                onAskAboutCode={handleAnalyzeCode}
+                onRunCode={handleRunCode}
+                onSubmitCode={handleSubmitCode}
+                isAiAnalyzing={loading}
+                isExecuting={isExecuting}
+                isSubmitting={isSubmitting}
+                executionResult={executionResult}
+                submissionResult={submissionResult}
+                onClearConsole={handleClearConsole}
+              />
+            </div>
+          )}
 
-          {/* Tutor Chat Pane */}
+          {/* Divider 2: Between Code and Chat */}
+          {showEditorDesktop && (
+            <div
+              onMouseDown={handleMouseDown('divider2')}
+              className="hidden md:flex w-1 hover:w-1.5 bg-zinc-800/80 hover:bg-purple-500/80 transition-all cursor-col-resize items-center justify-center group z-30 shrink-0"
+              title="Drag to resize Editor panel"
+            >
+              <div className="w-0.5 h-6 bg-zinc-600 group-hover:bg-white rounded-full"></div>
+            </div>
+          )}
+
+          {/* Mobile Fallbacks for Problem / Code tabs when hidden on desktop */}
+          {mobileActiveTab === 'problem' && !showProblemDesktop && (
+            <div className="w-full h-full block md:hidden z-20 absolute inset-0">
+              <ProblemDescription
+                problems={problems}
+                currentProblem={currentProblem}
+                onSelectProblem={handleSelectProblem}
+                loading={loadingProblem}
+              />
+            </div>
+          )}
+
+          {mobileActiveTab === 'code' && !showEditorDesktop && (
+            <div className="w-full h-full block md:hidden z-20 absolute inset-0">
+              <CodeEditor
+                language={language}
+                setLanguage={handleLanguageChangeWithProblem}
+                code={code}
+                setCode={setCode}
+                onAskAboutCode={handleAnalyzeCode}
+                onRunCode={handleRunCode}
+                onSubmitCode={handleSubmitCode}
+                isAiAnalyzing={loading}
+                isExecuting={isExecuting}
+                isSubmitting={isSubmitting}
+                executionResult={executionResult}
+                submissionResult={submissionResult}
+                onClearConsole={handleClearConsole}
+              />
+            </div>
+          )}
+
+          {/* Socratic Chat Pane (Fills all remaining width) */}
           <div
             className={`flex-1 flex flex-col h-full bg-[#080B11] min-w-0 overflow-hidden ${
               mobileActiveTab === 'chat' ? 'flex' : 'hidden md:flex'
@@ -447,7 +622,7 @@ export default function Tutor() {
                     {currentProblem ? `Ready for ${currentProblem.title}?` : 'Deliberate Practice Mode'}
                   </h3>
                   <p className="text-[11px] sm:text-xs text-zinc-500 leading-relaxed">
-                    Check the problem description, write your approach in the editor, and click <span className="text-purple-400 font-semibold">Analyze Logic</span> or use the hints below.
+                    Test with <span className="text-emerald-400 font-semibold">Run</span>, validate with <span className="text-emerald-400 font-semibold">Submit</span>, or consult the mentor via <span className="text-purple-400 font-semibold">Analyze Logic</span>.
                   </p>
                 </div>
               ) : (
