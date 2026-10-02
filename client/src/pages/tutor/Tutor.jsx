@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { 
   sendTutorMessage, 
   fetchUserSessions, 
@@ -25,13 +25,15 @@ import {
   BookOpen,
   MessageSquare,
   X,
-  GripVertical
+  ChevronDown,
+  Check
 } from 'lucide-react';
 
 export default function Tutor() {
   const navigate = useNavigate();
+  const { slug: routeSlug } = useParams();
 
-  // Sessions and Chat State
+  // Sessions & Chat State
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -43,17 +45,19 @@ export default function Tutor() {
   const [problems, setProblems] = useState([]);
   const [currentProblem, setCurrentProblem] = useState(null);
   const [loadingProblem, setLoadingProblem] = useState(false);
+  const [problemDropdownOpen, setProblemDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
-  // Layout & Resizable Panes State
+  // Responsive Layout & Panes
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 1024);
   const [showProblemDesktop, setShowProblemDesktop] = useState(true);
   const [showEditorDesktop, setShowEditorDesktop] = useState(true);
-  const [mobileActiveTab, setMobileActiveTab] = useState('problem'); // 'problem' | 'code' | 'chat'
+  const [mobileActiveTab, setMobileActiveTab] = useState('code');
 
-  // Dynamic pane widths in percentages
-  const [problemWidth, setProblemWidth] = useState(28); // 28%
-  const [editorWidth, setEditorWidth] = useState(38);   // 38% (Chat gets 100 - 28 - 38 = 34%)
-  const isDraggingRef = useRef(null); // 'divider1' | 'divider2' | null
+  // Percentage widths for desktop
+  const [problemWidth, setProblemWidth] = useState(28);
+  const [editorWidth, setEditorWidth] = useState(38);
+  const isDraggingRef = useRef(null);
   const workspaceContainerRef = useRef(null);
 
   // Code & Sandbox Execution State
@@ -71,9 +75,19 @@ export default function Tutor() {
   };
 
   useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setProblemDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
     loadSessions();
     loadProblems();
-  }, []);
+  }, [routeSlug]);
 
   useEffect(() => {
     if (mobileActiveTab === 'chat') {
@@ -81,7 +95,18 @@ export default function Tutor() {
     }
   }, [messages, loading, mobileActiveTab]);
 
-  // Resizable Panes Drag Handlers
+  const getStorageKey = (slug, lang) => `pg_code_${slug}_${lang}`;
+
+  const loadSavedOrStarterCode = (problem, lang) => {
+    if (!problem) return '';
+    const key = getStorageKey(problem.slug, lang);
+    const saved = localStorage.getItem(key);
+    if (saved !== null) {
+      return saved;
+    }
+    return problem.starterCode?.[lang] || '';
+  };
+
   const handleMouseDown = (dividerId) => (e) => {
     e.preventDefault();
     isDraggingRef.current = dividerId;
@@ -98,11 +123,9 @@ export default function Tutor() {
     const mousePercent = (mouseX / totalWidth) * 100;
 
     if (isDraggingRef.current === 'divider1') {
-      // Clamped between 18% and 45%
       const newProblemWidth = Math.min(Math.max(mousePercent, 18), 45);
       setProblemWidth(newProblemWidth);
     } else if (isDraggingRef.current === 'divider2') {
-      // Clamped so editor + problem doesn't exceed 82% (leaving 18% min for chat)
       const baseProblem = showProblemDesktop ? problemWidth : 0;
       const calculatedEditor = mousePercent - baseProblem;
       const newEditorWidth = Math.min(Math.max(calculatedEditor, 25), 82 - baseProblem);
@@ -140,7 +163,8 @@ export default function Tutor() {
       const problemList = await fetchAllProblems();
       setProblems(problemList);
       if (problemList.length > 0) {
-        await handleSelectProblem(problemList[0].slug);
+        const targetSlug = routeSlug || problemList[0].slug;
+        await handleSelectProblem(targetSlug, false);
       }
     } catch (err) {
       console.error('Failed to load problem listing:', err);
@@ -149,16 +173,21 @@ export default function Tutor() {
     }
   };
 
-  const handleSelectProblem = async (slug) => {
+  const handleSelectProblem = async (slug, updateRoute = true) => {
     setLoadingProblem(true);
+    setProblemDropdownOpen(false);
     try {
       const problemData = await fetchProblemBySlug(slug);
       setCurrentProblem(problemData);
       
-      const starter = problemData?.starterCode?.[language] || '';
-      setCode(starter);
+      const initialCode = loadSavedOrStarterCode(problemData, language);
+      setCode(initialCode);
       setExecutionResult(null);
       setSubmissionResult(null);
+
+      if (updateRoute && slug !== routeSlug) {
+        navigate(`/tutor/${slug}`, { replace: true });
+      }
     } catch (err) {
       console.error('Failed to retrieve problem details:', err);
     } finally {
@@ -166,11 +195,26 @@ export default function Tutor() {
     }
   };
 
+  const handleCodeChange = (newCode) => {
+    setCode(newCode);
+    if (currentProblem) {
+      localStorage.setItem(getStorageKey(currentProblem.slug, language), newCode);
+    }
+  };
+
   const handleLanguageChangeWithProblem = (newLang) => {
     setLanguage(newLang);
-    if (currentProblem?.starterCode?.[newLang]) {
-      setCode(currentProblem.starterCode[newLang]);
+    if (currentProblem) {
+      const updatedCode = loadSavedOrStarterCode(currentProblem, newLang);
+      setCode(updatedCode);
     }
+  };
+
+  const handleResetCode = () => {
+    if (!currentProblem) return;
+    const starter = currentProblem.starterCode?.[language] || '';
+    localStorage.removeItem(getStorageKey(currentProblem.slug, language));
+    setCode(starter);
   };
 
   const handleSelectSession = async (sessionId) => {
@@ -217,7 +261,10 @@ export default function Tutor() {
 
     setIsExecuting(true);
     try {
-      const res = await runCodeSnippet(language, code);
+      const res = await runCodeSnippet(language, code, {
+        problemId: currentProblem?._id,
+        slug: currentProblem?.slug,
+      });
       setExecutionResult(res);
     } catch (err) {
       console.error('Code execution failed:', err);
@@ -292,7 +339,7 @@ export default function Tutor() {
         ...updatedMessages,
         { 
           role: 'assistant', 
-          content: 'Sorry, I ran into an issue connecting to the mentor engine. Please try again.' 
+          content: 'Sorry, I ran into an issue connecting to CodePilot. Please try again.' 
         }
       ]);
     } finally {
@@ -314,7 +361,7 @@ export default function Tutor() {
     }
     const prompt = currentProblem
       ? `I am working on "${currentProblem.title}". Review my approach against the constraints and test cases, and guide me on edge cases or potential bottlenecks.`
-      : 'Please analyze my current code implementation using Socratic guidance.';
+      : 'Please analyze my current code implementation and guide me on best practices.';
     
     executeSend(prompt, true);
   };
@@ -330,7 +377,7 @@ export default function Tutor() {
 
   return (
     <div className="relative flex h-screen bg-[#080B11] text-zinc-100 font-sans selection:bg-purple-600/30 overflow-hidden">
-      {/* Mobile Backdrop */}
+      {/* Mobile Sidebar Backdrop */}
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
@@ -338,7 +385,7 @@ export default function Tutor() {
         />
       )}
 
-      {/* Sidebar: Past Sessions */}
+      {/* Sidebar: Past Sessions Drawer */}
       <aside
         className={`fixed md:relative top-0 bottom-0 left-0 z-50 transition-all duration-300 ease-in-out border-zinc-800/80 bg-[#0B0F19] flex flex-col overflow-hidden shrink-0 ${
           sidebarOpen 
@@ -346,7 +393,7 @@ export default function Tutor() {
             : 'w-0 border-r-0 -translate-x-full md:translate-x-0'
         }`}
       >
-        <div className="p-4 border-b border-zinc-800/80 flex items-center justify-between">
+        <div className="p-3.5 border-b border-zinc-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="bg-purple-600 p-1 rounded-md">
               <Terminal className="w-3.5 h-3.5 text-white" />
@@ -357,7 +404,7 @@ export default function Tutor() {
           <div className="flex items-center gap-1.5">
             <button
               onClick={handleNewChat}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+              className="flex items-center gap-1 px-2 py-1 text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>New</span>
@@ -403,39 +450,81 @@ export default function Tutor() {
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col h-full bg-[#080B11] min-w-0 w-full overflow-hidden">
         {/* Workspace Top Header */}
-        <header className="h-14 border-b border-zinc-800/80 px-4 sm:px-6 flex items-center justify-between bg-[#080B11]/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <header className="h-12 sm:h-14 border-b border-zinc-800/80 px-2 sm:px-4 flex items-center justify-between bg-[#080B11]/90 backdrop-blur-md sticky top-0 z-30 shrink-0 gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-2 min-w-0">
             <button
-              onClick={() => navigate('/dashboard')}
-              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0 cursor-pointer"
-              title="Back to Dashboard"
+              onClick={() => navigate('/problems')}
+              className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0 cursor-pointer"
+              title="Back to Problems"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0 cursor-pointer"
+              className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded-lg transition-colors shrink-0 cursor-pointer"
               title={sidebarOpen ? 'Hide History' : 'Show History'}
             >
               {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
             </button>
             
-            <div className="flex items-center gap-2 min-w-0">
-              <h1 className="text-xs sm:text-sm font-bold text-zinc-100 truncate">
-                {currentProblem ? currentProblem.title : 'Socratic Workspace'}
-              </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-600/10 border border-purple-500/20 text-[10px] font-mono text-purple-400 shrink-0">
-                <Sparkles className="w-3 h-3" /> Socratic Guided
-              </span>
+            {/* Problem Switcher Dropdown */}
+            <div className="relative min-w-0" ref={dropdownRef}>
+              <button
+                onClick={() => setProblemDropdownOpen(!problemDropdownOpen)}
+                className="flex items-center gap-1 sm:gap-1.5 px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] sm:text-xs font-semibold text-zinc-200 transition-colors cursor-pointer max-w-[110px] xs:max-w-[140px] sm:max-w-xs"
+              >
+                <span className="truncate">{currentProblem ? currentProblem.title : 'Problem'}</span>
+                <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0" />
+              </button>
+
+              {problemDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1.5 w-60 sm:w-64 bg-[#0E131F] border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden py-1">
+                  <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-zinc-500 border-b border-zinc-800/60">
+                    Switch Problem
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {problems.map((p) => {
+                      const isSelected = currentProblem?.slug === p.slug;
+                      return (
+                        <button
+                          key={p.slug}
+                          onClick={() => handleSelectProblem(p.slug, true)}
+                          className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-zinc-800/60 transition-colors cursor-pointer ${
+                            isSelected ? 'bg-purple-950/30 text-purple-300 font-medium' : 'text-zinc-300'
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <div className="truncate">{p.title}</div>
+                            <div className="text-[10px] text-zinc-500">{p.category}</div>
+                          </div>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                            p.difficulty === 'Easy' 
+                              ? 'bg-emerald-500/10 text-emerald-400' 
+                              : p.difficulty === 'Medium' 
+                              ? 'bg-amber-500/10 text-amber-400' 
+                              : 'bg-rose-500/10 text-rose-400'
+                          }`}>
+                            {p.difficulty}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
+
+            <span className="hidden xl:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-600/10 border border-purple-500/20 text-[10px] font-mono text-purple-400 shrink-0">
+              <Sparkles className="w-3 h-3" /> CodePilot Active
+            </span>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Desktop Toggles */}
+          <div className="flex items-center shrink-0">
+            {/* Desktop Panel Toggles */}
             <div className="hidden md:flex items-center gap-1.5">
               <button
                 onClick={() => setShowProblemDesktop(!showProblemDesktop)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                   showProblemDesktop 
                     ? 'bg-purple-600/15 border-purple-500/30 text-purple-300' 
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
@@ -447,7 +536,7 @@ export default function Tutor() {
 
               <button
                 onClick={() => setShowEditorDesktop(!showEditorDesktop)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                   showEditorDesktop 
                     ? 'bg-purple-600/15 border-purple-500/30 text-purple-300' 
                     : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
@@ -458,68 +547,63 @@ export default function Tutor() {
               </button>
             </div>
 
-            {/* Mobile Tab Switcher */}
-            <div className="flex md:hidden items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+            {/* Mobile Viewport Tabs */}
+            <div className="flex md:hidden items-center bg-zinc-900 border border-zinc-800/90 rounded-lg p-0.5">
               <button
                 onClick={() => setMobileActiveTab('problem')}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
+                className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
                   mobileActiveTab === 'problem'
-                    ? 'bg-purple-600 text-white shadow-sm'
+                    ? 'bg-purple-600 text-white font-semibold'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <BookOpen className="w-3.5 h-3.5" />
-                <span>Problem</span>
+                Problem
               </button>
               <button
                 onClick={() => setMobileActiveTab('code')}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
+                className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
                   mobileActiveTab === 'code'
-                    ? 'bg-purple-600 text-white shadow-sm'
+                    ? 'bg-purple-600 text-white font-semibold'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <Code className="w-3.5 h-3.5" />
-                <span>Code</span>
+                Code
               </button>
               <button
                 onClick={() => setMobileActiveTab('chat')}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
+                className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors cursor-pointer ${
                   mobileActiveTab === 'chat'
-                    ? 'bg-purple-600 text-white shadow-sm'
+                    ? 'bg-purple-600 text-white font-semibold'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>Chat</span>
+                Chat
               </button>
             </div>
           </div>
         </header>
 
-        {/* Content Body: Resizable 3-Column Workspace */}
+        {/* Content Body */}
         <div 
           ref={workspaceContainerRef} 
           className="flex-1 flex overflow-hidden min-h-0 relative select-text"
         >
-          {/* Problem Statement Pane */}
-          {showProblemDesktop && (
-            <div
-              style={{ width: `${problemWidth}%` }}
-              className={`h-full transition-none overflow-hidden shrink-0 hidden md:block ${
-                mobileActiveTab === 'problem' ? '!w-full !block z-20 absolute inset-0 md:relative' : ''
-              }`}
-            >
-              <ProblemDescription
-                problems={problems}
-                currentProblem={currentProblem}
-                onSelectProblem={handleSelectProblem}
-                loading={loadingProblem}
-              />
-            </div>
-          )}
+          {/* PROBLEM PANEL */}
+          <div
+            style={{ width: window.innerWidth >= 768 ? `${problemWidth}%` : '100%' }}
+            className={`h-full overflow-hidden shrink-0 ${
+              mobileActiveTab === 'problem' ? 'flex flex-col w-full' : 'hidden'
+            } ${showProblemDesktop ? 'md:flex md:flex-col' : 'md:hidden'}`}
+          >
+            <ProblemDescription
+              problems={problems}
+              currentProblem={currentProblem}
+              onSelectProblem={(s) => handleSelectProblem(s, true)}
+              loading={loadingProblem}
+            />
+          </div>
 
-          {/* Divider 1: Between Problem and Code */}
+          {/* DIVIDER 1: Desktop only */}
           {showProblemDesktop && showEditorDesktop && (
             <div
               onMouseDown={handleMouseDown('divider1')}
@@ -530,35 +614,36 @@ export default function Tutor() {
             </div>
           )}
 
-          {/* Code Editor Pane */}
-          {showEditorDesktop && (
-            <div
-              style={{
-                width: showProblemDesktop ? `${editorWidth}%` : `${editorWidth + problemWidth * 0.5}%`
-              }}
-              className={`h-full transition-none overflow-hidden shrink-0 hidden md:block ${
-                mobileActiveTab === 'code' ? '!w-full !block z-20 absolute inset-0 md:relative' : ''
-              }`}
-            >
-              <CodeEditor
-                language={language}
-                setLanguage={handleLanguageChangeWithProblem}
-                code={code}
-                setCode={setCode}
-                onAskAboutCode={handleAnalyzeCode}
-                onRunCode={handleRunCode}
-                onSubmitCode={handleSubmitCode}
-                isAiAnalyzing={loading}
-                isExecuting={isExecuting}
-                isSubmitting={isSubmitting}
-                executionResult={executionResult}
-                submissionResult={submissionResult}
-                onClearConsole={handleClearConsole}
-              />
-            </div>
-          )}
+          {/* CODE EDITOR PANEL */}
+          <div
+            style={{
+              width: window.innerWidth >= 768
+                ? showProblemDesktop ? `${editorWidth}%` : `${editorWidth + problemWidth * 0.5}%`
+                : '100%'
+            }}
+            className={`h-full overflow-hidden shrink-0 ${
+              mobileActiveTab === 'code' ? 'flex flex-col w-full' : 'hidden'
+            } ${showEditorDesktop ? 'md:flex md:flex-col' : 'md:hidden'}`}
+          >
+            <CodeEditor
+              language={language}
+              setLanguage={handleLanguageChangeWithProblem}
+              code={code}
+              setCode={handleCodeChange}
+              onResetCode={handleResetCode}
+              onAskAboutCode={handleAnalyzeCode}
+              onRunCode={handleRunCode}
+              onSubmitCode={handleSubmitCode}
+              isAiAnalyzing={loading}
+              isExecuting={isExecuting}
+              isSubmitting={isSubmitting}
+              executionResult={executionResult}
+              submissionResult={submissionResult}
+              onClearConsole={handleClearConsole}
+            />
+          </div>
 
-          {/* Divider 2: Between Code and Chat */}
+          {/* DIVIDER 2: Desktop only */}
           {showEditorDesktop && (
             <div
               onMouseDown={handleMouseDown('divider2')}
@@ -569,60 +654,27 @@ export default function Tutor() {
             </div>
           )}
 
-          {/* Mobile Fallbacks for Problem / Code tabs when hidden on desktop */}
-          {mobileActiveTab === 'problem' && !showProblemDesktop && (
-            <div className="w-full h-full block md:hidden z-20 absolute inset-0">
-              <ProblemDescription
-                problems={problems}
-                currentProblem={currentProblem}
-                onSelectProblem={handleSelectProblem}
-                loading={loadingProblem}
-              />
-            </div>
-          )}
-
-          {mobileActiveTab === 'code' && !showEditorDesktop && (
-            <div className="w-full h-full block md:hidden z-20 absolute inset-0">
-              <CodeEditor
-                language={language}
-                setLanguage={handleLanguageChangeWithProblem}
-                code={code}
-                setCode={setCode}
-                onAskAboutCode={handleAnalyzeCode}
-                onRunCode={handleRunCode}
-                onSubmitCode={handleSubmitCode}
-                isAiAnalyzing={loading}
-                isExecuting={isExecuting}
-                isSubmitting={isSubmitting}
-                executionResult={executionResult}
-                submissionResult={submissionResult}
-                onClearConsole={handleClearConsole}
-              />
-            </div>
-          )}
-
-          {/* Socratic Chat Pane (Fills all remaining width) */}
+          {/* CODEPILOT CHAT PANEL */}
           <div
             className={`flex-1 flex flex-col h-full bg-[#080B11] min-w-0 overflow-hidden ${
-              mobileActiveTab === 'chat' ? 'flex' : 'hidden md:flex'
-            }`}
+              mobileActiveTab === 'chat' ? 'flex w-full' : 'hidden'
+            } md:flex`}
           >
-            {/* Messages Thread */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3.5">
               {fetchingHistory ? (
                 <div className="flex justify-center items-center h-full text-zinc-500 text-xs">
                   Loading session thread...
                 </div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center max-w-sm mx-auto px-4 text-zinc-400">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-600/10 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-3 shadow-lg shadow-purple-950/30">
-                    <Terminal className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <div className="w-10 h-10 rounded-xl bg-purple-600/10 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-2.5 shadow-lg shadow-purple-950/30">
+                    <Terminal className="w-5 h-5" />
                   </div>
                   <h3 className="text-xs sm:text-sm font-bold text-zinc-200 mb-1">
-                    {currentProblem ? `Ready for ${currentProblem.title}?` : 'Deliberate Practice Mode'}
+                    {currentProblem ? `Ready for ${currentProblem.title}?` : 'CodePilot Deliberate Practice'}
                   </h3>
-                  <p className="text-[11px] sm:text-xs text-zinc-500 leading-relaxed">
-                    Test with <span className="text-emerald-400 font-semibold">Run</span>, validate with <span className="text-emerald-400 font-semibold">Submit</span>, or consult the mentor via <span className="text-purple-400 font-semibold">Analyze Logic</span>.
+                  <p className="text-[11px] text-zinc-500 leading-relaxed">
+                    Test with <span className="text-emerald-400 font-semibold">Run</span>, validate with <span className="text-emerald-400 font-semibold">Submit</span>, or consult <span className="text-purple-400 font-semibold">CodePilot</span> for logic guidance.
                   </p>
                 </div>
               ) : (
@@ -634,7 +686,7 @@ export default function Tutor() {
                       className={`flex ${isAssistant ? 'justify-start' : 'justify-end'}`}
                     >
                       <div
-                        className={`max-w-[92%] sm:max-w-[85%] rounded-xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed shadow-md ${
+                        className={`max-w-[94%] sm:max-w-[85%] rounded-xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed shadow-md ${
                           isAssistant
                             ? 'bg-[#0E131F] border border-zinc-800 text-zinc-200'
                             : 'bg-purple-600 text-white font-medium'
@@ -643,7 +695,7 @@ export default function Tutor() {
                         {isAssistant ? (
                           <>
                             <div className="flex items-center gap-1.5 text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-2">
-                              <Sparkles className="w-3 h-3" /> Socratic Mentor
+                              <Sparkles className="w-3 h-3" /> CodePilot AI
                             </div>
                             <MarkdownRenderer content={msg.content} />
                           </>
@@ -658,41 +710,40 @@ export default function Tutor() {
 
               {loading && (
                 <div className="flex justify-start">
-                  <div className="bg-[#0E131F] border border-zinc-800 rounded-xl p-3 sm:p-4 text-xs text-zinc-400 flex items-center space-x-2">
+                  <div className="bg-[#0E131F] border border-zinc-800 rounded-xl p-3 text-xs text-zinc-400 flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse delay-75"></span>
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse delay-150"></span>
-                    <span className="text-xs ml-2 text-zinc-400">Formulating Socratic guidance...</span>
+                    <span className="text-xs ml-2 text-zinc-400">CodePilot is thinking...</span>
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Bottom Input Area with Action Pills */}
-            <div className="p-3 sm:p-4 border-t border-zinc-800/80 bg-[#080B11]/90 backdrop-blur-md shrink-0 space-y-2.5">
-              <div className="max-w-4xl mx-auto">
+            {/* Input & Action Pills Area */}
+            <div className="p-2.5 sm:p-3 border-t border-zinc-800/80 bg-[#080B11]/95 backdrop-blur-md shrink-0 space-y-2">
+              <div className="max-w-4xl mx-auto overflow-x-auto pb-1 no-scrollbar">
                 <TutorActions 
                   onTriggerAction={handleTriggerAction} 
                   disabled={loading} 
                 />
               </div>
 
-              <form onSubmit={handleFormSubmit} className="flex items-center gap-2 max-w-4xl mx-auto">
+              <form onSubmit={handleFormSubmit} className="flex items-center gap-1.5 sm:gap-2 max-w-4xl mx-auto">
                 <input
                   type="text"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder="Ask a question or explain your approach..."
+                  placeholder="Ask CodePilot a question or explain your approach..."
                   disabled={loading}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
+                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-colors disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={loading || !inputMessage.trim()}
-                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs sm:text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-md shadow-purple-600/20 shrink-0 cursor-pointer"
+                  className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 shadow-md shadow-purple-600/20 shrink-0 cursor-pointer"
                 >
-                  <span className="hidden sm:inline">Send</span>
                   <Send className="w-3.5 h-3.5" />
                 </button>
               </form>

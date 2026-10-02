@@ -32,6 +32,7 @@ export default function CodeEditor({
   setLanguage,
   code,
   setCode,
+  onResetCode,
   onAskAboutCode,
   onRunCode,
   onSubmitCode,
@@ -58,7 +59,11 @@ export default function CodeEditor({
   };
 
   const handleReset = () => {
-    setCode(BOILERPLATES[language] || '');
+    if (onResetCode) {
+      onResetCode();
+    } else {
+      setCode(BOILERPLATES[language] || '');
+    }
   };
 
   const handleRunClick = async () => {
@@ -78,90 +83,91 @@ export default function CodeEditor({
   const isBusy = isAiAnalyzing || isExecuting || isSubmitting;
 
   return (
-    <div className="flex flex-col h-full bg-[#0E131F] border-r border-zinc-800/80">
-      {/* Editor Toolbar */}
-      <div className="h-12 border-b border-zinc-800/80 px-4 flex items-center justify-between bg-[#0B0F19] shrink-0">
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold text-zinc-400 font-mono">LANG:</label>
+    <div className="flex flex-col h-full bg-[#0E131F] border-r border-zinc-800/80 min-w-0">
+      {/* Editor Toolbar - Responsive & Compact on mobile */}
+      <div className="h-11 sm:h-12 border-b border-zinc-800/80 px-2 sm:px-4 flex items-center justify-between bg-[#0B0F19] shrink-0 gap-1">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <label className="hidden sm:inline text-xs font-semibold text-zinc-400 font-mono">LANG:</label>
           <select
             value={language}
             onChange={handleLanguageChange}
             disabled={isBusy}
-            className="bg-zinc-900 border border-zinc-700/60 text-zinc-200 text-xs rounded-md px-2.5 py-1 focus:outline-none focus:border-purple-500 disabled:opacity-50 cursor-pointer"
+            className="bg-zinc-900 border border-zinc-700/60 text-zinc-200 text-[11px] sm:text-xs rounded-md px-1.5 sm:px-2.5 py-1 focus:outline-none focus:border-purple-500 disabled:opacity-50 cursor-pointer"
           >
             <option value="cpp">C++</option>
             <option value="python">Python</option>
-            <option value="javascript">JavaScript</option>
+            <option value="javascript">JS</option>
           </select>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Reset button */}
           <button
             onClick={handleReset}
             disabled={isBusy}
-            title="Reset to boilerplate"
-            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+            title="Reset code"
+            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer shrink-0"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset</span>
+            <span className="hidden md:inline">Reset</span>
           </button>
 
-          {/* Sandbox Execution Run Button */}
+          {/* Run button */}
           <button
             onClick={handleRunClick}
             disabled={isBusy}
-            title="Execute code in sandbox against stdout"
-            className="px-2.5 sm:px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/70 text-zinc-200 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Run Code"
+            className="px-2 sm:px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/70 text-zinc-200 rounded-md text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             {isExecuting ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
-                <span>Running...</span>
+                <span className="hidden xs:inline">Run</span>
               </>
             ) : (
               <>
                 <Play className="w-3 h-3 fill-emerald-400 text-emerald-400" />
-                <span>Run</span>
+                <span className="hidden xs:inline">Run</span>
               </>
             )}
           </button>
 
-          {/* Submit Solution Button */}
+          {/* Submit button */}
           <button
             onClick={handleSubmitClick}
             disabled={isBusy}
-            title="Submit solution against test cases"
-            className="px-2.5 sm:px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Submit Solution"
+            className="px-2 sm:px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-md text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
-                <span>Submitting...</span>
+                <span className="hidden xs:inline">Submit</span>
               </>
             ) : (
               <>
                 <UploadCloud className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Submit</span>
+                <span className="hidden xs:inline">Submit</span>
               </>
             )}
           </button>
 
-          {/* Socratic Mentor Code Analysis Button */}
+          {/* Socratic Mentor Analyze Button */}
           <button
             onClick={onAskAboutCode}
             disabled={isBusy}
-            title="Ask Socratic tutor for hints or guidance on this code"
-            className="px-2.5 sm:px-3 py-1 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800/50 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer disabled:cursor-not-allowed"
+            title="Analyze Logic with Mentor"
+            className="px-2 sm:px-2.5 py-1 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800/50 text-white rounded-md text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-colors shadow-sm cursor-pointer disabled:cursor-not-allowed shrink-0"
           >
             {isAiAnalyzing ? (
               <>
                 <Loader2 className="w-3 h-3 animate-spin" />
-                <span>Thinking...</span>
+                <span className="hidden sm:inline">Thinking...</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-3 h-3 text-purple-200" />
-                <span>Analyze Logic</span>
+                <span className="hidden xs:inline">Analyze</span>
               </>
             )}
           </button>
@@ -183,7 +189,7 @@ export default function CodeEditor({
             wordWrap: 'on',
             lineNumbers: 'on',
             tabSize: 4,
-            padding: { top: 12 },
+            padding: { top: 10 },
             fontFamily: "'Fira Code', 'Courier New', monospace",
           }}
         />

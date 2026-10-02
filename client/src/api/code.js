@@ -1,23 +1,21 @@
 import api from './axios';
 
 /**
- * Execute code snippet via the backend runner (Ad-hoc run)
- * @param {string} language - 'cpp' | 'python' | 'javascript'
- * @param {string} code - Source code string
- * @param {string} stdin - Optional standard input string
+ * Execute code snippet (LeetCode style Test Case Run)
  */
-export const runCodeSnippet = async (language, code, stdin = '') => {
+export const runCodeSnippet = async (language, code, options = {}) => {
   const response = await api.post('/code/run', {
     language,
     code,
-    stdin,
+    stdin: options?.stdin || '',
+    problemId: options?.problemId,
+    slug: options?.slug,
   });
   return response.data;
 };
 
 /**
- * Submit code solution against problem test cases
- * @param {Object} payload - { problemId, slug, language, code }
+ * Submit code solution against all problem test cases
  */
 export const submitCodeSolution = async ({ problemId, slug, language, code }) => {
   const response = await api.post('/code/submit', {
@@ -26,5 +24,13 @@ export const submitCodeSolution = async ({ problemId, slug, language, code }) =>
     language,
     code,
   });
+  return response.data;
+};
+
+/**
+ * Fetch candidate's submission history and stats
+ */
+export const fetchUserSubmissions = async () => {
+  const response = await api.get('/code/submissions');
   return response.data;
 };

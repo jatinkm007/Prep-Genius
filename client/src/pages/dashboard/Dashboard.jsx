@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { fetchUserSubmissions } from '../../api/code.js';
 import { 
   Code2, 
   FileText, 
@@ -12,12 +13,44 @@ import {
   Terminal, 
   Sparkles,
   Lock,
-  ArrowRight
+  ArrowRight,
+  CheckCircle2,
+  XCircle,
+  Code
 } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, logout } = useAuth() || {};
   const navigate = useNavigate();
+
+  const [stats, setStats] = useState({
+    totalSubmissions: 0,
+    acceptedSubmissions: 0,
+    problemsSolvedCount: 0,
+    submissions: [],
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadStats = async () => {
+      try {
+        const data = await fetchUserSubmissions();
+        if (isMounted && data) {
+          setStats(data);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard statistics:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadStats();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleLogout = () => {
     if (logout) logout();
@@ -25,6 +58,10 @@ export default function Dashboard() {
   };
 
   const username = user?.name || user?.email?.split('@')[0] || 'coder';
+
+  const accuracyRate = stats.totalSubmissions > 0
+    ? Math.round((stats.acceptedSubmissions / stats.totalSubmissions) * 100)
+    : 0;
 
   return (
     <div className="min-h-screen bg-[#080B11] text-zinc-100 font-sans selection:bg-purple-600/30 flex flex-col">
@@ -51,7 +88,7 @@ export default function Dashboard() {
           <button
             onClick={handleLogout}
             title="Log out"
-            className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-zinc-900 rounded-lg transition-colors"
+            className="p-2 text-zinc-400 hover:text-rose-400 hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -69,10 +106,10 @@ export default function Dashboard() {
             </div>
 
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-tight leading-snug">
-              Ready to level up your interview prep?
+              Welcome back, <span className="text-purple-400">{username}</span>!
             </h1>
             <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-xl">
-              Step into deliberate practice. Benchmark your code, sharpen behavioral clarity, and optimize your resume for eager tech recruiters.
+              Track your algorithmic growth, review past executions, and test complex logic under deliberate practice.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mt-6 sm:mt-8 pt-6 border-t border-zinc-800/80">
@@ -81,8 +118,10 @@ export default function Dashboard() {
                   <Flame className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Streak</div>
-                  <div className="text-sm font-bold text-zinc-100">3 days</div>
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Submissions</div>
+                  <div className="text-sm font-bold text-zinc-100">
+                    {loading ? '...' : `${stats.totalSubmissions} Runs`}
+                  </div>
                 </div>
               </div>
 
@@ -92,7 +131,9 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Solved</div>
-                  <div className="text-sm font-bold text-zinc-100">0 Problems</div>
+                  <div className="text-sm font-bold text-zinc-100">
+                    {loading ? '...' : `${stats.problemsSolvedCount} Unique`}
+                  </div>
                 </div>
               </div>
 
@@ -101,8 +142,10 @@ export default function Dashboard() {
                   <TrendingUp className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Readiness</div>
-                  <div className="text-sm font-bold text-emerald-400">72%</div>
+                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Pass Rate</div>
+                  <div className="text-sm font-bold text-emerald-400">
+                    {loading ? '...' : `${accuracyRate}%`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -122,9 +165,9 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-            {/* Module 1: Socratic AI Tutor & Workspace (Active in Phase 2) */}
+            {/* Module 1: CodePilot AI Workspace */}
             <div 
-              onClick={() => navigate('/tutor')}
+              onClick={() => navigate('/problems')}
               className="group relative flex flex-col justify-between p-5 sm:p-6 bg-[#0E131F] hover:bg-[#121929] border border-purple-500/30 hover:border-purple-500/70 rounded-xl cursor-pointer transition-all duration-200 shadow-lg shadow-purple-950/20 hover:shadow-purple-900/30"
             >
               <div>
@@ -137,11 +180,11 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <h3 className="text-sm font-bold text-zinc-100 group-hover:text-purple-300 transition-colors flex items-center gap-1.5">
-                  Socratic AI Tutor
+                  CodePilot AI
                   <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all text-purple-400" />
                 </h3>
                 <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-                  Interactive guided problem solving. Benchmark logic and get step-by-step Socratic hints without spoilers.
+                  Interactive problem workspace. Select from curated DSA challenges and benchmark logic in real-time.
                 </p>
               </div>
 
@@ -150,7 +193,7 @@ export default function Dashboard() {
                   Phase 2 Active
                 </span>
                 <span className="text-xs font-medium text-purple-400 flex items-center gap-1 group-hover:underline">
-                  Launch &rarr;
+                  Browse Problems &rarr;
                 </span>
               </div>
             </div>
@@ -202,6 +245,99 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Recent Executions Section */}
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-zinc-100 flex items-center gap-2">
+                <Code className="w-4 h-4 text-purple-400" />
+                Recent Code Executions
+              </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Audit trail of your recent test evaluations and submissions
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/problems')}
+              className="text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors cursor-pointer"
+            >
+              Solve More &rarr;
+            </button>
+          </div>
+
+          <div className="bg-[#0B0F19] border border-zinc-800/80 rounded-xl overflow-hidden shadow-lg">
+            {loading ? (
+              <div className="p-8 text-center text-xs text-zinc-500">
+                Fetching execution telemetry...
+              </div>
+            ) : stats.submissions.length === 0 ? (
+              <div className="p-8 text-center text-xs text-zinc-500">
+                No submissions recorded yet. Head over to CodePilot and run your first solution!
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0E1321] text-zinc-400 uppercase tracking-wider font-semibold border-b border-zinc-800">
+                    <tr>
+                      <th className="py-3 px-4">Problem</th>
+                      <th className="py-3 px-4">Language</th>
+                      <th className="py-3 px-4">Verdict</th>
+                      <th className="py-3 px-4">Test Cases</th>
+                      <th className="py-3 px-4">Runtime</th>
+                      <th className="py-3 px-4">Submitted</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
+                    {stats.submissions.map((sub) => {
+                      const isPassed = sub.passed;
+                      return (
+                        <tr key={sub._id} className="hover:bg-zinc-900/40 transition-colors">
+                          <td className="py-3.5 px-4 font-semibold text-zinc-100">
+                            {sub.problemId?.title || sub.problemSlug}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-[11px] uppercase text-zinc-400">
+                            {sub.language}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                isPassed
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                              }`}
+                            >
+                              {isPassed ? (
+                                <CheckCircle2 className="w-3 h-3 shrink-0" />
+                              ) : (
+                                <XCircle className="w-3 h-3 shrink-0" />
+                              )}
+                              {sub.verdict}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-zinc-400">
+                            {sub.passedTestCases} / {sub.totalTestCases}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-zinc-400">
+                            {sub.runtime || '0.000s'}
+                          </td>
+                          <td className="py-3.5 px-4 text-zinc-500">
+                            {new Date(sub.createdAt).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </main>

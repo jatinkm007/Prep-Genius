@@ -41,13 +41,13 @@ export default function TerminalDrawer({
   return (
     <div
       className={`border-t border-zinc-800/80 bg-[#090D16] flex flex-col transition-all duration-200 shrink-0 ${
-        isOpen ? 'h-56' : 'h-9'
+        isOpen ? 'h-64 sm:h-60' : 'h-9'
       }`}
     >
       {/* Title Bar & Tab Switcher */}
       <div className="h-9 px-3 bg-[#0B0F19] border-b border-zinc-800/60 flex items-center justify-between text-xs select-none">
         <div className="flex items-center gap-1 sm:gap-2">
-          {/* Console Tab Button */}
+          {/* Console / Test Case Run Tab */}
           <button
             onClick={() => {
               setActiveTab('console');
@@ -60,7 +60,7 @@ export default function TerminalDrawer({
             }`}
           >
             <Terminal className="w-3.5 h-3.5 text-purple-400" />
-            <span>Console</span>
+            <span>Test Case Run</span>
             {executionResult && (
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
@@ -70,7 +70,7 @@ export default function TerminalDrawer({
             )}
           </button>
 
-          {/* Test Results Tab Button */}
+          {/* Test Results (Submit) Tab */}
           <button
             onClick={() => {
               setActiveTab('tests');
@@ -83,7 +83,7 @@ export default function TerminalDrawer({
             }`}
           >
             <ListCheck className="w-3.5 h-3.5 text-purple-400" />
-            <span>Test Results</span>
+            <span>Submission</span>
             {submissionResult && (
               <span
                 className={`w-1.5 h-1.5 rounded-full ${
@@ -116,7 +116,7 @@ export default function TerminalDrawer({
         </div>
       </div>
 
-      {/* Drawer Content Panel */}
+      {/* Drawer Content */}
       {isOpen && (
         <div className="flex-1 p-3 overflow-y-auto font-mono text-[11px] leading-relaxed selection:bg-purple-600/30">
           {isBusy ? (
@@ -125,54 +125,114 @@ export default function TerminalDrawer({
               <span>
                 {isSubmitting
                   ? 'Testing solution against all test cases...'
-                  : 'Executing snippet in sandbox...'}
+                  : 'Executing code against sample case...'}
               </span>
             </div>
           ) : activeTab === 'console' ? (
-            /* CONSOLE VIEW */
+            /* LEETCODE STYLE TEST RUN VIEW */
             !executionResult ? (
               <div className="text-zinc-600 italic py-2">
-                Click &quot;Run Code&quot; to test your code against standard input/output.
+                Click &quot;Run&quot; to test your solution against sample input.
+              </div>
+            ) : executionResult.isCompileError ? (
+              <div className="space-y-1">
+                <div className="text-rose-400 text-[10px] uppercase font-bold flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Compilation Error:</span>
+                </div>
+                <pre className="text-rose-400 whitespace-pre-wrap bg-rose-950/20 p-2.5 rounded border border-rose-900/40 text-[11px]">
+                  {executionResult.stderr || 'Compilation failed'}
+                </pre>
               </div>
             ) : (
-              <div className="space-y-2">
-                {executionResult.stdout && (
-                  <div>
-                    <div className="text-zinc-500 text-[10px] uppercase font-bold mb-1">
-                      Standard Output:
+              <div className="space-y-3.5">
+                {/* Result Status Banner */}
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+                  <div className="flex items-center gap-2">
+                    {executionResult.success ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-bold text-emerald-400 font-sans tracking-wide">
+                          Accepted
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-4 h-4 text-rose-400" />
+                        <span className="text-xs font-bold text-rose-400 font-sans tracking-wide">
+                          Wrong Answer
+                        </span>
+                      </>
+                    )}
+                    <span className="text-zinc-500 text-[11px] font-sans">
+                      (Sample Test Case 1)
+                    </span>
+                  </div>
+                  {executionResult.time && (
+                    <span className="text-[11px] text-zinc-500 font-mono">
+                      Runtime: {executionResult.time}s
+                    </span>
+                  )}
+                </div>
+
+                {/* ROW 1: Input */}
+                <div className="space-y-1">
+                  <div className="text-zinc-400 text-[10px] uppercase tracking-wider font-bold">
+                    Input
+                  </div>
+                  <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-lg px-3 py-2 text-zinc-200 text-xs font-mono">
+                    {executionResult.input || 'No input'}
+                  </div>
+                </div>
+
+                {/* ROW 2: Output */}
+                <div className="space-y-1">
+                  <div className="text-zinc-400 text-[10px] uppercase tracking-wider font-bold">
+                    Output
+                  </div>
+                  <div
+                    className={`border rounded-lg px-3 py-2 text-xs font-mono font-semibold ${
+                      executionResult.success
+                        ? 'bg-zinc-950/70 border-zinc-800/80 text-zinc-200'
+                        : 'bg-rose-950/25 border-rose-900/50 text-rose-400'
+                    }`}
+                  >
+                    {executionResult.output || 'No output'}
+                  </div>
+                </div>
+
+                {/* ROW 3: Expected */}
+                <div className="space-y-1">
+                  <div className="text-zinc-400 text-[10px] uppercase tracking-wider font-bold">
+                    Expected
+                  </div>
+                  <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-lg px-3 py-2 text-emerald-400 text-xs font-mono font-semibold">
+                    {executionResult.expected || 'No expected output'}
+                  </div>
+                </div>
+
+                {/* ROW 4: Stdout Debug Prints (cout / print) */}
+                {executionResult.stdout && executionResult.stdout.trim() && (
+                  <div className="space-y-1 pt-1 border-t border-zinc-800/60">
+                    <div className="text-zinc-400 text-[10px] uppercase tracking-wider font-bold">
+                      Stdout (Console Print)
                     </div>
-                    <pre className="text-emerald-400 whitespace-pre-wrap bg-zinc-950/40 p-2 rounded border border-zinc-800/60">
+                    <pre className="bg-zinc-950/70 border border-zinc-800/80 rounded-lg px-3 py-2 text-zinc-300 text-xs font-mono whitespace-pre-wrap">
                       {executionResult.stdout}
                     </pre>
                   </div>
                 )}
-
-                {executionResult.stderr && (
-                  <div>
-                    <div className="text-rose-400 text-[10px] uppercase font-bold mb-1 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3" />
-                      <span>Errors / Compiler Diagnostic:</span>
-                    </div>
-                    <pre className="text-rose-400 whitespace-pre-wrap bg-rose-950/10 p-2 rounded border border-rose-900/30">
-                      {executionResult.stderr}
-                    </pre>
-                  </div>
-                )}
-
-                {!executionResult.stdout && !executionResult.stderr && (
-                  <div className="text-zinc-500 italic">Program finished with no output.</div>
-                )}
               </div>
             )
           ) : (
-            /* TEST RESULTS VIEW */
+            /* SUBMISSION RESULTS VIEW */
             !submissionResult ? (
               <div className="text-zinc-600 italic py-2">
                 Click &quot;Submit&quot; to test your solution against all test cases.
               </div>
             ) : (
               <div className="space-y-3">
-                {/* Verdict Summary Header */}
+                {/* Summary Header */}
                 <div className="flex items-center justify-between pb-2 border-b border-zinc-800/60">
                   <div className="flex items-center gap-2">
                     <span

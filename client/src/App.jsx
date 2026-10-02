@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Analytics } from '@vercel/analytics/react';
+// import { Analytics } from '@vercel/analytics/react';
 
 // 1. Auth context provider
 import { AuthProvider } from './context/AuthContext.jsx';
@@ -10,6 +10,7 @@ import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
 import Dashboard from './pages/dashboard/Dashboard.jsx';
 import Tutor from './pages/tutor/Tutor.jsx';
+import ProblemList from './pages/problems/ProblemList.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 export default function App() {
@@ -30,8 +31,27 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="/problems"
+            element={
+              <ProtectedRoute>
+                <ProblemList />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="/tutor"
+            element={
+              <ProtectedRoute>
+                <Tutor />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/tutor/:slug"
             element={
               <ProtectedRoute>
                 <Tutor />
@@ -43,7 +63,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-        <Analytics />
+        {/* <Analytics /> */}
       </AuthProvider>
     </BrowserRouter>
   );

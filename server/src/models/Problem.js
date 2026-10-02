@@ -57,6 +57,17 @@ const problemSchema = new mongoose.Schema(
         type: String,
       },
     ],
+    signature: {
+      methodName: { type: String, default: '' },
+      returnType: { type: String, default: '' },
+      params: [
+        {
+          name: { type: String },
+          type: { type: String },
+          _id: false,
+        },
+      ],
+    },
     starterCode: {
       cpp: {
         type: String,
