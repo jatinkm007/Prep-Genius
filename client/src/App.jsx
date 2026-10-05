@@ -3,10 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 // import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 
-// 1. Auth context provider
 import { AuthProvider } from './context/AuthContext.jsx';
-
-// 2. Auth pages & components
 import Login from './pages/auth/Login.jsx';
 import Register from './pages/auth/Register.jsx';
 import Dashboard from './pages/dashboard/Dashboard.jsx';
