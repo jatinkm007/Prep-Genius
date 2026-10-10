@@ -4,6 +4,7 @@ import authRoutes from './routes/authRoutes.js';
 import tutorRoutes from './routes/tutorRoutes.js';
 import problemRoutes from './routes/problemRoutes.js';
 import codeRoutes from './routes/codeRoutes.js';
+import resumeRoutes from './routes/resumeRoutes.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
 const app = express();
@@ -52,6 +53,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tutor', tutorRoutes);
 app.use('/api/problems', problemRoutes);
 app.use('/api/code', codeRoutes);
+app.use('/api/resume', resumeRoutes);
 
 // Error handling middleware
 app.use(notFound);
