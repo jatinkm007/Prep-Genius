@@ -9,6 +9,7 @@ import Register from './pages/auth/Register.jsx';
 import Dashboard from './pages/dashboard/Dashboard.jsx';
 import Tutor from './pages/tutor/Tutor.jsx';
 import ProblemList from './pages/problems/ProblemList.jsx';
+import ResumeReview from './pages/resume/ResumeReview.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 export default function App() {
@@ -53,6 +54,15 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Tutor />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/resume"
+            element={
+              <ProtectedRoute>
+                <ResumeReview />
               </ProtectedRoute>
             }
           />
